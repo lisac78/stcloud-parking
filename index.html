@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#1d4ed8">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<title>St. Cloud Winter Parking</title>
+<style>
+  :root { --bg:#f1f5f9; --card:#fff; --ink:#0f172a; --mut:#64748b; --ok:#15803d; --okbg:#dcfce7; --no:#b91c1c; --nobg:#fee2e2; --warn:#a16207; --warnbg:#fef9c3; --acc:#1d4ed8; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#0b1220; --card:#162033; --ink:#e2e8f0; --mut:#94a3b8; --okbg:#14532d; --ok:#86efac; --nobg:#7f1d1d; --no:#fecaca; --warnbg:#713f12; --warn:#fde68a; --acc:#60a5fa; } }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--ink); }
+  main { max-width:560px; margin:0 auto; padding:16px; }
+  h1 { font-size:1.4rem; margin:8px 0 4px; }
+  .sub { color:var(--mut); margin:0 0 16px; font-size:.9rem; }
+  .card { background:var(--card); border-radius:14px; padding:16px; margin-bottom:14px; box-shadow:0 1px 3px rgba(0,0,0,.08); }
+  label { display:block; font-weight:600; margin:10px 0 6px; }
+  select, input { width:100%; font-size:1rem; padding:10px; border-radius:10px; border:1px solid #cbd5e1; background:var(--card); color:var(--ink); }
+  .row { display:flex; gap:10px; } .row > div { flex:1; }
+  .answer { border-radius:14px; padding:18px; text-align:center; }
+  .answer .big { font-size:1.6rem; font-weight:800; margin:4px 0; }
+  .answer .when { font-size:.95rem; opacity:.9; }
+  .ok { background:var(--okbg); color:var(--ok); } .no { background:var(--nobg); color:var(--no); } .warn { background:var(--warnbg); color:var(--warn); }
+  .neutral { background:var(--bg); }
+  table { width:100%; border-collapse:collapse; font-size:.92rem; }
+  td { padding:8px 6px; border-top:1px solid rgba(100,116,139,.2); }
+  td:last-child { text-align:right; font-weight:600; }
+  .pill { display:inline-block; padding:2px 8px; border-radius:999px; font-size:.82rem; }
+  ul { padding-left:20px; margin:6px 0; } li { margin:4px 0; }
+  a { color:var(--acc); }
+  .small { font-size:.82rem; color:var(--mut); }
+  details summary { cursor:pointer; font-weight:600; }
+</style>
+</head>
+<body>
+<main>
+  <h1>🚗❄️ Where do I park tonight?</h1>
+  <p class="sub">St. Cloud, MN seasonal parking (Nov 1 – Apr 1, enforced 1:00–7:00 a.m.)</p>
+
+  <div class="card">
+    <label for="zone">My street is in…</label>
+    <select id="zone">
+      <option value="oddeven">Core neighborhoods: odd/even parking</option>
+      <option value="ban">Seasonal ban area: no overnight street parking</option>
+      <option value="mwf">SCSU area: signs say no parking Mon/Wed/Fri</option>
+      <option value="tts">SCSU area: signs say no parking Tue/Thu/Sat</option>
+    </select>
+    <details style="margin-top:8px">
+      <summary class="small">Not sure which zone?</summary>
+      <p class="small"><b>Seasonal ban areas:</b> north and west of the Sauk River; west of the Mississippi and south of 22nd St S; west of Hwy 15; north and east of Hwy 10; east of the Mississippi and south of Hwy 301 / Minnesota Blvd.<br>
+      <b>SCSU area:</b> follow the posted signs (they apply year-round).<br>
+      <b>Everywhere else</b> (the 7 core neighborhoods) uses odd/even.<br>
+      Maps: <a href="https://www.ci.stcloud.mn.us/ImageRepository/Document?documentID=19878" target="_blank">zone map</a> ·
+      <a href="https://www.ci.stcloud.mn.us/DocumentCenter/View/24043/Seasonal-Parking-Restrictions" target="_blank">restrictions PDF</a></p>
+    </details>
+
+    <div class="row" id="houseRow">
+      <div>
+        <label for="house">House # where I park (optional)</label>
+        <input id="house" inputmode="numeric" placeholder="e.g. 1214">
+      </div>
+    </div>
+    <label for="when">Checking for</label>
+    <input id="when" type="datetime-local">
+  </div>
+
+  <div class="card answer neutral" id="answer"></div>
+
+  <div class="card">
+    <b>Next 7 nights</b>
+    <table id="week"></table>
+  </div>
+
+  <div class="card">
+    <b>Always remember</b>
+    <ul>
+      <li>Paved street <b>under 32 ft wide</b> in a ban area? <b>No parking at any time.</b></li>
+      <li>Parking before midnight? Follow the rule for <b>after</b> midnight (this app does that for you).</li>
+      <li>Outside 1–7 a.m., you may park only once the street is cleared of snow and ice.</li>
+      <li>Rules apply <b>regardless of snowfall</b>. Violations get a ticket.</li>
+      <li>⚠️ <b>Snow emergency</b> (72 hrs unless ended early): violators are ticketed <b>and towed immediately</b> at your cost.</li>
+    </ul>
+    <p class="small">
+      <a href="https://www.ci.stcloud.mn.us/list.aspx" target="_blank">Get snow emergency alerts (text/email)</a> ·
+      <a href="https://www.ci.stcloud.mn.us/1665/Snow-Emergency" target="_blank">Snow emergency page</a> ·
+      <a href="https://www.ci.stcloud.mn.us/1733/Winter-Parking-Regulations" target="_blank">Official rules</a><br>
+      Questions: Police Info Desk 320-345-4444 (M–F 8–4:30)
+    </p>
+  </div>
+
+  <p class="small">Unofficial helper based on the City of St. Cloud's posted rules. Posted signs and city notices take priority.</p>
+</main>
+
+<script>
+const $ = id => document.getElementById(id);
+const DAYS = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+const MONTHS = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+
+// The 1–7 a.m. window that matters: if it's before 7 a.m., tonight's window is today; otherwise it's tomorrow morning.
+function windowDate(d) {
+  const w = new Date(d.getFullYear(), d.getMonth(), d.getDate());
+  if (d.getHours() >= 7) w.setDate(w.getDate() + 1);
+  return w;
+}
+function inSeason(w) {
+  const m = w.getMonth(), day = w.getDate();
+  return m >= 10 || m <= 1 || m === 2 || (m === 3 && day === 1); // Nov 1 – Apr 1
+}
+function fmt(w) { return `${DAYS[w.getDay()]} ${MONTHS[w.getMonth()]} ${w.getDate()}`; }
+
+// Returns {cls, big, detail}
+function rule(zone, w, house) {
+  if (!inSeason(w) && zone !== 'mwf' && zone !== 'tts')
+    return { cls:'ok', big:'Park anywhere legal', detail:'Seasonal rules aren\'t in effect (they run Nov 1 – Apr 1).' };
+  if (zone === 'oddeven') {
+    const side = w.getDate() % 2 === 1 ? 'even' : 'odd';
+    let big = `Park on the ${side.toUpperCase()} side`;
+    let cls = 'neutral', extra = '';
+    const n = parseInt(house, 10);
+    if (!isNaN(n)) {
+      const mine = n % 2 === 0 ? 'even' : 'odd';
+      if (mine === side) { cls = 'ok'; extra = ` — ✅ your side (${n}) is fine`; }
+      else { cls = 'no'; extra = ` — 🚫 move across the street from ${n}`; }
+    }
+    return { cls, big: big + extra, detail:`The ${w.getDate()}${ord(w.getDate())} is ${w.getDate()%2?'odd':'even'}, so park on the side with ${side} house numbers.` };
+  }
+  if (zone === 'ban')
+    return { cls:'no', big:'🚫 No street parking', detail:'No parking on any public street from 1–7 a.m. Use a driveway, garage, or lot.' };
+  const banned = zone === 'mwf' ? [1,3,5] : [2,4,6];
+  if (banned.includes(w.getDay()))
+    return { cls:'no', big:'🚫 No parking on signed streets', detail:`${DAYS[w.getDay()]} morning is a no-parking day on your signs (1–7 a.m.).` };
+  return { cls:'ok', big:'✅ OK to park', detail:`${DAYS[w.getDay()]} morning isn't on your signs. Still obey any other posted signs.` };
+}
+function ord(n) { return (n%100>=11&&n%100<=13)?'th':({1:'st',2:'nd',3:'rd'}[n%10]||'th'); }
+
+function render() {
+  const zone = $('zone').value, house = $('house').value.trim();
+  localStorage.setItem('scp', JSON.stringify({ zone, house }));
+  $('houseRow').style.display = zone === 'oddeven' ? '' : 'none';
+  const now = $('when').value ? new Date($('when').value) : new Date();
+  const w = windowDate(now);
+  const r = rule(zone, w, house);
+  const ev = new Date(w); ev.setDate(ev.getDate() - 1);
+  const active = now.getHours() >= 1 && now.getHours() < 7;
+  $('answer').className = 'card answer ' + r.cls;
+  $('answer').innerHTML = `<div class="when">${active ? 'Right now' : `Tonight (${fmt(ev)} night → ${fmt(w)}, 1–7 a.m.)`}</div>
+    <div class="big">${r.big}</div><div class="when">${r.detail}</div>`;
+  let rows = '';
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(w); d.setDate(d.getDate() + i);
+    const x = rule(zone, d, house);
+    const prev = new Date(d); prev.setDate(prev.getDate() - 1);
+    rows += `<tr><td>${DAYS[prev.getDay()]} night → ${fmt(d)}</td><td><span class="pill ${x.cls}">${x.big.replace(/ — .*/, '')}</span></td></tr>`;
+  }
+  $('week').innerHTML = rows;
+}
+
+const saved = JSON.parse(localStorage.getItem('scp') || '{}');
+if (saved.zone) $('zone').value = saved.zone;
+if (saved.house) $('house').value = saved.house;
+['zone','house','when'].forEach(id => $(id).addEventListener('input', render));
+render();
+setInterval(() => { if (!$('when').value) render(); }, 60000);
+</script>
+</body>
+</html>
