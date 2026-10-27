@@ -31,6 +31,10 @@
   a { color:var(--acc); }
   .small { font-size:.82rem; color:var(--mut); }
   details summary { cursor:pointer; font-weight:600; }
+  button { width:100%; font-size:1rem; padding:11px; border-radius:10px; border:0; background:var(--acc); color:#fff; font-weight:600; cursor:pointer; }
+  button.sec { background:var(--bg); color:var(--ink); border:1px solid #cbd5e1; }
+  .spot { display:flex; justify-content:space-between; align-items:center; gap:10px; padding:10px 0; border-top:1px solid rgba(100,116,139,.2); }
+  .spot b { display:block; } .spot a { white-space:nowrap; font-weight:600; }
 </style>
 </head>
 <body>
@@ -66,6 +70,16 @@
   </div>
 
   <div class="card answer neutral" id="answer"></div>
+
+  <div class="card">
+    <label for="dest" style="margin-top:0">Where are you going?</label>
+    <input id="dest" placeholder="Address or place, e.g. 912 9th Ave S" enterkeyhint="search">
+    <div class="row" style="margin-top:10px">
+      <div><button id="go">Find a spot</button></div>
+      <div><button id="here" class="sec">📍 Near me</button></div>
+    </div>
+    <div id="spots" style="margin-top:10px"></div>
+  </div>
 
   <div class="card">
     <b>Next 7 nights</b>
@@ -155,6 +169,129 @@ function render() {
   }
   $('week').innerHTML = rows;
 }
+
+// ---- Nearby spot finder ----
+// Address points: Minnesota statewide open address layer (MnGeo). Lots: OpenStreetMap via Overpass.
+const ADDR = 'https://enterprise.gisdata.mn.gov/aghost/rest/services/us_mn_state_mngeo/loc_addresses_open/FeatureServer/0/query';
+const ABBR = { avenue:'ave', street:'st', drive:'dr', road:'rd', boulevard:'blvd', court:'ct', lane:'ln', place:'pl',
+  circle:'cir', highway:'hwy', parkway:'pkwy', terrace:'ter', trail:'trl', north:'n', south:'s', east:'e', west:'w',
+  northeast:'ne', northwest:'nw', southeast:'se', southwest:'sw' };
+let dest = null; // {lat, lon, label}
+
+const norm = s => s.toLowerCase().replace(/[.,#]/g, ' ').replace(/\b(\d+)(st|nd|rd|th)\b/g, '$1')
+  .split(/\s+/).filter(Boolean).map(t => ABBR[t] || t);
+const ordNum = n => /^\d+$/.test(n) ? n + ord(+n) : n;
+function streetOf(a) {
+  return [a.st_pre_dir, ordNum(a.st_name || ''), a.st_pos_typ, a.st_pos_dir].filter(Boolean)
+    .map(t => { const k = ABBR[t.toLowerCase()]; return !k ? t : /^[nsew]{1,2}$/.test(k) ? k.toUpperCase() : k[0].toUpperCase() + k.slice(1); }).join(' ');
+}
+function meters(a, b) {
+  const R = 6371000, r = x => x * Math.PI / 180;
+  const dLat = r(b.lat - a.lat), dLon = r(b.lon - a.lon);
+  const h = Math.sin(dLat/2)**2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(dLon/2)**2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const walk = m => m < 100 ? `${Math.round(m)} m` : `${Math.max(1, Math.round(m / 80))} min walk`;
+const mapLink = (lat, lon) => `https://www.google.com/maps/search/?api=1&query=${lat},${lon}`;
+async function getJSON(url, opts) { const r = await fetch(url, opts); if (!r.ok) throw new Error(r.status); return r.json(); }
+
+async function geocode(text) {
+  const m = text.trim().match(/^(\d+)\s+(.+)$/);
+  if (m) { // Try official address points first: exact house number in St. Cloud, best street match
+    const where = encodeURIComponent(`anumber=${m[1]} AND ctu_name='Saint Cloud'`);
+    const j = await getJSON(`${ADDR}?where=${where}&outFields=*&outSR=4326&f=json`);
+    const want = norm(m[2]).filter(t => !['saint','cloud','mn','minnesota','stcloud'].includes(t) && !/^\d{5}$/.test(t));
+    let best = null, bestScore = 0;
+    for (const f of j.features || []) {
+      const have = norm(streetOf(f.attributes));
+      const score = want.filter(t => have.includes(t)).length - 0.1 * have.filter(t => !want.includes(t)).length;
+      const nameTok = norm(ordNum(f.attributes.st_name || ''))[0]; // street name must match, e.g. "9" or "millstone"
+      if (want.includes(nameTok) && score > bestScore) { best = f; bestScore = score; }
+    }
+    if (best) return { lat: best.geometry.y, lon: best.geometry.x, label: `${best.attributes.anumber} ${streetOf(best.attributes)}` };
+  }
+  // Places and other addresses: OpenStreetMap, limited to the St. Cloud area
+  const q = encodeURIComponent(text.replace(/,\s*(st\.?|saint)\s+cloud\b.*$/i, '').replace(/\s+(st\.?|saint)\s+cloud(,?\s*mn)?\s*$/i, ''));
+  const j = await getJSON(`https://nominatim.openstreetmap.org/search?q=${q}&format=json&addressdetails=1&limit=1&viewbox=-94.30,45.62,-94.05,45.48&bounded=1`);
+  if (j.length) { const a = j[0].address || {};
+    return { lat: +j[0].lat, lon: +j[0].lon, label: j[0].name || [a.house_number, a.road].filter(Boolean).join(' ') || text }; }
+  const ph = await getJSON(`https://photon.komoot.io/api/?q=${q}&limit=1&bbox=-94.30,45.48,-94.05,45.62`);
+  const f = ph.features && ph.features[0];
+  if (!f) throw new Error('notfound');
+  return { lat: f.geometry.coordinates[1], lon: f.geometry.coordinates[0], label: f.properties.name || text };
+}
+
+async function nearbyAddresses(p) {
+  const u = `${ADDR}?geometry=${p.lon},${p.lat}&geometryType=esriGeometryPoint&inSR=4326&distance=300&units=esriSRUnit_Meter` +
+    `&outFields=anumber,st_pre_dir,st_name,st_pos_typ,st_pos_dir&outSR=4326&resultRecordCount=2000&f=json`;
+  const j = await getJSON(u);
+  return (j.features || []).filter(f => f.attributes.anumber != null)
+    .map(f => ({ n: f.attributes.anumber, street: streetOf(f.attributes), lat: f.geometry.y, lon: f.geometry.x }))
+    .map(a => ({ ...a, d: meters(p, a) })).sort((a, b) => a.d - b.d);
+}
+
+// Public parking lots/ramps in St. Cloud from OpenStreetMap (snapshot Oct 2026): lat, lon, name, fee
+const LOTS_RAW = [45.55805,-94.16113,"Swan Lot",0,45.55869,-94.1604,"Canoe Lot",0,45.54877,-94.12477,"Public parking lot",0,45.57748,-94.16902,"St. Cloud Hospital Parking lot (building E)",0,45.57372,-94.16819,"St. Cloud Hospital Parking lot (building E)",0,45.561,-94.15688,"Grand Central Parking Lot",0,45.55901,-94.15864,"Public parking lot",0,45.58865,-94.19398,"Public parking lot",0,45.5595,-94.16409,"Paramount Ramp",1,45.55434,-94.15243,"4th Avenue Parking Ramp",1,45.55355,-94.15288,"Miller Pay Lot",1,45.56096,-94.16164,"Plaza Lot",0,45.56185,-94.16091,"Public parking lot",1,45.61786,-94.19386,"Public parking lot",0,45.55544,-94.14886,"Public parking lot",1,45.55505,-94.1514,"Horseshoe Lot",0,45.5455,-94.14332,"Public parking lot",0,45.49403,-94.1484,"Truck Parking",0,45.5502,-94.22286,"Public parking lot",0,45.55034,-94.2182,"Public parking lot",0,45.5572,-94.20816,"Public parking lot",0,45.55819,-94.21057,"Public parking lot",0,45.55147,-94.13111,"Public parking lot",0,45.54728,-94.20169,"Public parking lot",0,45.54733,-94.20202,"Public parking lot",0,45.54953,-94.21721,"Public parking lot",0,45.54983,-94.22616,"Public parking lot",0,45.54983,-94.22493,"Public parking lot",0,45.5538,-94.21283,"Public parking lot",0,45.55812,-94.20885,"Public parking lot",0,45.5497,-94.1453,"Public parking lot",0,45.53185,-94.191,"Bus Parking",0,45.54705,-94.18456,"Public parking lot",0,45.5639,-94.29193,"Public parking lot",0,45.5682,-94.29806,"Public parking lot",0,45.56854,-94.29722,"Public parking lot",0,45.54072,-94.10733,"Parking Lot, Sand Prairie WMA",0,45.54347,-94.13067,"Public parking lot",0,45.5477,-94.14915,"Public parking lot",0,45.57752,-94.16997,"Parking ramp",0,45.559,-94.15928,"Lady Slipper Lot",0,45.55862,-94.15895,"Lady Slipper Lot",0,45.52006,-94.16204,"Public parking lot",0,45.50487,-94.15176,"Public parking lot",0,45.5143,-94.15852,"Public parking lot",0,45.50478,-94.14426,"Public parking lot",0,45.58668,-94.16622,"Public parking lot",0,45.58721,-94.16587,"Public parking lot",0,45.59046,-94.16706,"Public parking lot",0,45.58813,-94.16438,"Public parking lot",0,45.5868,-94.16184,"Public parking lot",0,45.61746,-94.20399,"Public parking lot",0,45.53771,-94.29851,"Public parking lot",0,45.57086,-94.15264,"Public parking lot",0,45.59637,-94.18105,"Public parking lot",0,45.56169,-94.15867,"River's Edge West Parking Ramp",1];
+const LOTS = [];
+for (let i = 0; i < LOTS_RAW.length; i += 4) LOTS.push({ lat: LOTS_RAW[i], lon: LOTS_RAW[i+1], name: LOTS_RAW[i+2], fee: LOTS_RAW[i+3] });
+const nearbyLots = p => LOTS.map(l => ({ ...l, d: meters(p, l) })).filter(l => l.d < 2500).sort((a, b) => a.d - b.d).slice(0, 3);
+
+function spotRow(title, sub, lat, lon) {
+  return `<div class="spot"><div><b>${title}</b><span class="small">${sub}</span></div><a href="${mapLink(lat, lon)}" target="_blank">Map ↗</a></div>`;
+}
+
+let searchId = 0; // so a slow older search can't overwrite a newer one
+async function findSpots() {
+  if (!dest) return;
+  const id = ++searchId;
+  const box = { set innerHTML(h) { if (id === searchId) $('spots').innerHTML = h; } };
+  box.innerHTML = `<p class="small">Looking near <b>${dest.label}</b>…</p>`;
+  const zone = $('zone').value;
+  const w = windowDate($('when').value ? new Date($('when').value) : new Date());
+  const r = rule(zone, w, '');
+  try {
+    let html = `<p class="small">Near <b>${dest.label}</b> · ${fmt(w)}, 1–7 a.m.</p>`;
+    const streetOK = r.cls !== 'no';
+    if (streetOK) {
+      const side = zone === 'oddeven' && inSeason(w) ? (w.getDate() % 2 === 1 ? 0 : 1) : null; // required house-number parity
+      const addrs = (await nearbyAddresses(dest)).filter(a => side === null || a.n % 2 === side);
+      const seen = new Set(), picks = [];
+      for (const a of addrs) { if (!seen.has(a.street)) { seen.add(a.street); picks.push(a); } if (picks.length === 3) break; }
+      if (!picks.length) html += '<p class="small">No addresses found nearby. Try a more specific address.</p>';
+      picks.forEach((a, i) => html += spotRow(`${i === 0 ? '⭐ ' : ''}In front of ${a.n} ${a.street}`,
+        `${side === null ? '' : (side ? 'Odd' : 'Even') + ' side · '}${walk(a.d)}`, a.lat, a.lon));
+      html += '<p class="small">Skip narrow streets (paved, under 32 ft) and anywhere signs say otherwise.</p>';
+    } else {
+      html += '<p class="small">Street parking isn\'t allowed here tonight. Nearest parking lots:</p>';
+      const lots = nearbyLots(dest);
+      if (!lots.length) html += '<p class="small">No public lots found nearby on the map. Use a driveway or garage.</p>';
+      lots.forEach(l => html += spotRow(l.name, `${walk(l.d)}${l.fee ? ' · fee' : ''}`, l.lat, l.lon));
+      html += '<p class="small">Lot info comes from OpenStreetMap. Check the lot\'s signs for overnight rules.</p>';
+    }
+    box.innerHTML = html;
+  } catch (e) {
+    box.innerHTML = '<p class="small">Couldn\'t look that up right now. Check the address or try again.</p>';
+  }
+}
+
+async function searchDest() {
+  const text = $('dest').value.trim(); if (!text) return;
+  const id = ++searchId;
+  $('spots').innerHTML = '<p class="small">Finding that address…</p>';
+  try { const d = await geocode(text); if (id !== searchId) return; dest = d; localStorage.setItem('scpDest', text); findSpots(); }
+  catch { if (id !== searchId) return; dest = null; $('spots').innerHTML = '<p class="small">Couldn\'t find that in St. Cloud. Try "123 Main St" format.</p>'; }
+}
+$('go').addEventListener('click', searchDest);
+$('dest').addEventListener('keydown', e => { if (e.key === 'Enter') searchDest(); });
+$('here').addEventListener('click', () => {
+  if (!navigator.geolocation) return;
+  $('spots').innerHTML = '<p class="small">Getting your location…</p>';
+  navigator.geolocation.getCurrentPosition(
+    p => { dest = { lat: p.coords.latitude, lon: p.coords.longitude, label: 'your location' }; findSpots(); },
+    () => { $('spots').innerHTML = '<p class="small">Location permission was denied.</p>'; });
+});
+['zone','when'].forEach(id => $(id).addEventListener('change', findSpots));
+if (localStorage.getItem('scpDest')) $('dest').value = localStorage.getItem('scpDest');
 
 const saved = JSON.parse(localStorage.getItem('scp') || '{}');
 if (saved.zone) $('zone').value = saved.zone;
